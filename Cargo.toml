@@ -1,0 +1,9 @@
+[package]
+name = "med2_translation_updater"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+walkdir = "2"
+anyhow = "1.0"
+regex = "1"
