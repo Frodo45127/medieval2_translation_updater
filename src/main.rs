@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::fs::{self, DirBuilder, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::thread::sleep;
+use std::time::Duration;
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -257,6 +259,11 @@ async fn process_single_file(input_path: &Path, output_path: &Path, old_eng: &Ha
                                 },
                                 Err(err) => {
                                     println!("Failed to translate with DeepL. Key: {}, Old val: {}, Error: {}", key, val_new, err);
+
+                                    if err.to_string().to_lowercase().contains("too many requests") {
+                                        println!("Sleeping 12 seconds to avoid rate limit. Remember to replace the old translation with the output and re-run this to translate the lines that errored out.");
+                                        sleep(Duration::from_secs(12));
+                                    }
                                 }
                             }
                         }
