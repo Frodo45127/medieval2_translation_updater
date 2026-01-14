@@ -205,79 +205,88 @@ async fn process_single_file(input_path: &Path, output_path: &Path, old_eng: &Ha
         let new_line_content = if trimmed.starts_with('¬') || trimmed.is_empty() {
             trimmed.to_string()
         } else {
-            match parse_line(line) {
+            match parse_line(trimmed) {
                 Some((key, val_new)) => {
 
-                    // Check if the value is the same as the old english files, in which case we resuse its old translation.
-                    // If it's not in the old translation or it is but has changed, keep the new english value.
-                    let mut val_to_use = if let Some(val_old) = old_eng.get(&key) {
-                        if &val_new == val_old {
-                            if let Some(val_trad) = old_trad.get(&key) {
+                    // Skip empty lines.
+                    if val_new.is_empty() {
+                        trimmed.to_string()
+                    } else {
 
-                                // Value unchanged, but different in the translation => pretranslated.
-                                if &val_new != val_trad {
-                                    Some(val_new.to_string())
+                        // Check if the value is the same as the old english files, in which case we resuse its old translation.
+                        // If it's not in the old translation or it is but has changed, keep the new english value.
+                        let mut val_to_use = if let Some(val_old) = old_eng.get(&key) {
+                            if &val_new == val_old.trim_end() {
+                                if let Some(val_trad) = old_trad.get(&key) {
+
+                                    // Value unchanged, but different in the translation => pretranslated.
+                                    if &val_new != val_trad.trim_end() {
+                                        Some(val_trad.trim_end().to_string())
+                                    }
+
+                                    // Value unchanged in all, needs translation.
+                                    else {
+                                        None
+                                    }
                                 }
 
-                                // Value unchanged in all, needs translation.
+                                // Value missing from the translation, needs translation.
                                 else {
                                     None
                                 }
-                            }
-
-                            // Value missing from the translation, needs translation.
-                            else {
+                            } else {
                                 None
                             }
                         } else {
                             None
-                        }
-                    } else {
-                        None
-                    };
+                        };
 
-                    // If we don't have a pre-translated line, check if we can translate it with DeepL.
-                    if val_to_use.is_none() {
-                        if let Some(translation) = translation_cache.get(&val_new) {
-                            val_to_use = Some(translation.to_string())
-                        } else if let Some((client, lang)) = translator {
+                        // If we don't have a pre-translated line, check if we can translate it with DeepL.
+                        if val_to_use.is_none() {
+                            if let Some(translation) = translation_cache.get(&val_new) {
+                                val_to_use = Some(translation.trim_end().to_string())
+                            } else if let Some((client, lang)) = translator {
 
-                            // Split multiline strings, because DeepL has a tendency to eath the \n otherwise.
-                            let val_new_split = val_new.replace("\\n", "\n");
-                            match client.translate_text(val_new_split.as_str(), lang.clone()).await {
-                                Ok(res) => {
-                                    let translated_text = res
-                                        .translations
-                                        .first()
-                                        .map(|s| s.text.replace("\n", "\\n"))
-                                        .unwrap_or_else(|| val_new.clone());
+                                // Split multiline strings, because DeepL has a tendency to eath the \n otherwise.
+                                let val_new_split = val_new.replace("\\n", "\n");
+                                match client.translate_text(val_new_split.as_str(), lang.clone()).await {
+                                    Ok(res) => {
+                                        let translated_text = res
+                                            .translations
+                                            .first()
+                                            .map(|s| s.text.trim_end().replace("\n", "\\n"))
+                                            .unwrap_or_else(|| val_new.trim_end().to_string());
 
-                                    // Cache the translation so we can re-use it if the line is repeated.
-                                    translation_cache.insert(val_new.to_owned(), translated_text.to_owned());
-                                    println!("Translated with DeepL. Key: {}, Old val: {}, New val: {}", key, val_new, translated_text);
-                                    val_to_use = Some(translated_text);
-                                },
-                                Err(err) => {
-                                    println!("Failed to translate with DeepL. Key: {}, Old val: {}, Error: {}", key, val_new, err);
+                                        // Cache the translation so we can re-use it if the line is repeated.
+                                        translation_cache.insert(val_new.to_owned(), translated_text.to_owned());
+                                        println!("Translated with DeepL. Key: {}, Old val: {}, New val: {}", key, val_new, translated_text);
+                                        val_to_use = Some(translated_text);
+                                    },
+                                    Err(err) => {
+                                        println!("Failed to translate with DeepL. Key: {}, Old val: {}, Error: {}", key, val_new, err);
 
-                                    if err.to_string().to_lowercase().contains("too many requests") {
-                                        println!("Sleeping 12 seconds to avoid rate limit. Remember to replace the old translation with the output and re-run this to translate the lines that errored out.");
-                                        sleep(Duration::from_secs(12));
+                                        if err.to_string().to_lowercase().contains("too many requests") {
+                                            println!("Sleeping 12 seconds to avoid rate limit. Remember to replace the old translation with the output and re-run this to translate the lines that errored out.");
+                                            sleep(Duration::from_secs(12));
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    match val_to_use {
-                        Some(translated_val) => format!("{{{}}}{}", key, translated_val),
-                        None => line.to_string()
+                        match val_to_use {
+                            Some(translated_val) => {
+                                translation_cache.insert(val_new.to_owned(), translated_val.to_owned());
+                                format!("{{{}}}{}", key, translated_val)
+                            },
+                            None => trimmed.to_string()
+                        }
                     }
                 }
                 None => trimmed.to_string(),
             }
         };
-        output_lines.push(new_line_content);
+        output_lines.push(new_line_content.trim_end().to_owned());
     }
 
     write_utf16_file(output_path, &output_lines)?;
