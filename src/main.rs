@@ -242,17 +242,22 @@ async fn process_single_file(input_path: &Path, output_path: &Path, old_eng: &Ha
 
                             // Split multiline strings, because DeepL has a tendency to eath the \n otherwise.
                             let val_new_split = val_new.replace("\\n", "\n");
-                            if let Ok(res) = client.translate_text(val_new_split.as_str(), lang.clone()).await {
-                                let translated_text = res
-                                    .translations
-                                    .first()
-                                    .map(|s| s.text.replace("\n", "\\n"))
-                                    .unwrap_or_else(|| val_new.clone());
+                            match client.translate_text(val_new_split.as_str(), lang.clone()).await {
+                                Ok(res) => {
+                                    let translated_text = res
+                                        .translations
+                                        .first()
+                                        .map(|s| s.text.replace("\n", "\\n"))
+                                        .unwrap_or_else(|| val_new.clone());
 
-                                // Cache the translation so we can re-use it if the line is repeated.
-                                translation_cache.insert(val_new.to_owned(), translated_text.to_owned());
-                                println!("Translated with DeepL. Key: {}, Old val: {}, New val: {}", key, val_new, translated_text);
-                                val_to_use = Some(translated_text);
+                                    // Cache the translation so we can re-use it if the line is repeated.
+                                    translation_cache.insert(val_new.to_owned(), translated_text.to_owned());
+                                    println!("Translated with DeepL. Key: {}, Old val: {}, New val: {}", key, val_new, translated_text);
+                                    val_to_use = Some(translated_text);
+                                },
+                                Err(err) => {
+                                    println!("Failed to translate with DeepL. Key: {}, Old val: {}, Error: {}", key, val_new, err);
+                                }
                             }
                         }
                     }
