@@ -138,7 +138,13 @@ fn load_file_to_map(file_path: &Path) -> Result<HashMap<String, String>> {
         Ok(content) => {
             for line in content.lines() {
                 if let Some((key, val)) = parse_line(line) {
-                    map.insert(key, val);
+                    if let Some(value) = map.insert(key.to_owned(), val.to_owned()) {
+                        if val == value {
+                            eprintln!("Warning: File {}, Duplicate key same value: {}. Value: {}", file_path.display(), key, value);
+                        } else {
+                            eprintln!("Warning: File {}, Duplicate key with different value: {}. Old value: {}. New value: {}", file_path.display(), key, value, val);
+                        }
+                    }
                 }
             }
         }
