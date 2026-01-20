@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
     };
 
     println!("Processing files...");
-    process_v3_files(&path_old_eng, &path_new_eng, &path_old_trad, &path_new_trad, &translator).await?;
+    process_files(&path_old_eng, &path_new_eng, &path_old_trad, &path_new_trad, &translator).await?;
 
     println!("Files processed successfully.");
     Ok(())
@@ -148,7 +148,7 @@ fn load_file_to_map(file_path: &Path) -> Result<HashMap<String, String>> {
     Ok(map)
 }
 
-async fn process_v3_files(
+async fn process_files(
     old_eng_base_path: &Path,
     new_eng_base_path: &Path,
     old_trad_base_path: &Path,
@@ -336,22 +336,27 @@ fn read_utf16_file(path: &Path) -> Result<String> {
 
 // Helper to write String lines to UTF-16LE BOM file
 fn write_utf16_file(path: &Path, lines: &[String]) -> Result<()> {
-    let mut file = File::create(path)?;
+    let mut data = Vec::new();
 
     // Write BOM
-    file.write_all(&[0xFF, 0xFE])?;
+    data.write_all(&[0xFF, 0xFE])?;
 
     for line in lines {
+
         // Write line content
         for c in line.encode_utf16() {
-            file.write_all(&c.to_le_bytes())?;
+            data.write_all(&c.to_le_bytes())?;
         }
 
         // Write CRLF
         for c in "\r\n".encode_utf16() {
-            file.write_all(&c.to_le_bytes())?;
+            data.write_all(&c.to_le_bytes())?;
         }
     }
+
+    let mut file = File::create(path)?;
+    file.write_all(&data)?;
+    file.flush()?;
 
     Ok(())
 }
